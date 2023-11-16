@@ -1,0 +1,2322 @@
+      //File Declaration                                              //
+       // -------------------------------------------------------------- //
+       DCL-F ORDERSPSFD  workstn(*Ext) InfDs(IOFBK) Sfile(ORDERSFL:SLRRN)
+                                                    Sfile(DLTSFL:DLTRRN)
+                                                    Sfile(CUSTWDWSFL:SelRrn)
+                                                    Sfile(PRODWDWSFL:SelRrn1);
+
+       DCL-F ORDERSFLP      Printer(*Ext) Usage(*Output) oflind(*in90);
+
+
+       DCL-F ORDERHDRF Disk(*Ext) Usage(*Input) keyed;
+       DCL-F PRODMSTF  Disk(*Ext) Usage(*Input) keyed;
+       // -------------------------------------------------------------- //
+      //  Datastructures                                                //
+       // -------------------------------------------------------------- //
+       Dcl-Ds PSSA EXTNAME('FPSDS')  PSDS;
+       End-Ds;
+
+       Dcl-Ds IOFBK;
+         Icurln     BinDec(4:0)   Pos(370);
+         Irecn      BinDec(4:0)   Pos(378);
+       End-Ds;
+
+       DCL-DS ProductDs ;
+         DsPrId     Packed(5:0);
+         DsPrNm     Char(15) ;
+         DsPrTQt    Packed(4:0);
+         DsPrAQt    Packed(4:0);
+       END-DS;
+
+       DCL-DS OrderDS;
+         DsID     Packed(5:0);
+         DsName   Char(15) ;
+         Dsprdt   Char(15) ;
+         Dsdate   Date     ;
+         DsPrQt   Packed(4:0);
+       END-DS;
+
+       DCL-DS CustomerDs;
+         DsCsId   Packed(5:0);
+         DsCsNm   Char(15) ;
+         DsCsCt   Char(10) ;
+         DsCsSt   Char(1)  ;
+       END-DS;
+
+       Dcl-Ds LDA  EXTNAME('FLDADS') DTAARA(*AUTO:*USRCTL:*LDA) END-DS;
+       // ------------------------------------------------------------- //
+      // Indicators                                                    //
+       // ------------------------------------------------------------- //
+       Dcl-Ds Indicators Based(IndicatorP);
+         F1Exit        Ind Pos(01) ;
+         F2Previous    Ind Pos(02) ;
+         F4Prompt      Ind Pos(04) ;
+         F5Refresh     Ind Pos(05) ;
+         F6Print       Ind Pos(06) ;
+         F9Add         Ind Pos(09) ;
+         F12Cancel     Ind Pos(12) ;
+         RiSfOpt       Ind Pos(36) ;
+         PcSfOpt       Ind Pos(36) ;
+         SflDisplay    Ind Pos(37) ;
+         SflDspCtl     Ind Pos(38) ;
+         SflClear      Ind Pos(39) ;
+         SflEnd        Ind Pos(40) ;
+         RiCtPos2      Ind Pos(42) ;
+         CWinSflDsp    Ind Pos(44) ;
+         CWinSflDspCtl Ind Pos(45) ;
+         CWinSflClr    Ind Pos(46) ;
+         CWinSflEnd    Ind Pos(47) ;
+         RiCSWOPT      Ind Pos(49) ;
+         RiPRWOPT      Ind Pos(50) ;
+         PWinSflDsp    Ind Pos(51) ;
+         PWinSflDspCtl Ind Pos(52) ;
+         PWinSflClr    Ind Pos(53) ;
+         PWinSflEnd    Ind Pos(54) ;
+         RiOrName      Ind Pos(56) ;
+         RiOrPrdt      Ind Pos(57) ;
+         RiOrQnty      Ind Pos(58) ;
+         Pagedown      Ind Pos(66) ;
+         Pageup        Ind Pos(67) ;
+         SflDltDsp     Ind Pos(80) ;
+         SflDltDspCtl  Ind Pos(81) ;
+         SflDltClear   Ind Pos(82) ;
+         RiEdCsNm      Ind Pos(84) ;
+         RiEdPrNm      Ind Pos(85) ;
+         RiEdPrQt      Ind Pos(86) ;
+         SflDltEnd     Ind Pos(83) ;
+         SflNxtChg     Ind Pos(99) ;
+       //66  = ROLLUP PRESSED
+       //67  = ROLLDOWN PRESSED
+       End-Ds;
+       // -------------------------------------------------------------- //
+       //Procedure Declaration                                          //    
+       // -------------------------------------------------------------- //
+       DCL-PR SPCNLRPG ExtPgm('SPCNLRPG');
+         SpPssa          Like(PSSA);
+       END-PR;
+
+       DCL-PR FPEPGMER ExtPgm('FPEPGMER');
+         SpPssa          Like(PSSA);
+       END-PR;
+
+       //Security Program                                             //
+       Dcl-Pr  Security Extpgm('SECURITY');
+       End-Pr;
+
+       //Send messages
+       Dcl-Pr SpSndPgm Extpgm('SPSNDPGM');
+         MsgId       Char(07)  ;           // Msg Id
+         MsgF        Char(10)  ;           // Msg File
+         MsgLib      Char(10)  ;           // Msg Library
+         MsgDta      Char(512) ;           // Msg Data
+         Tmsgq       Char(10)  ;           // To Msgq
+         Tmsgl       Char(10)  ;           // To Msgq Lib
+         Msgtype     Char(10)  ;           // Msg Type
+         RplMsgQ     Char(10)  ;           // Reply Msgq
+         RMsgQL      Char(10)  ;           // Reply Msgq Lib
+       End-Pr;
+       //Clear messages
+       Dcl-Pr SpClr    Extpgm('SPCLRMSG');
+       End-Pr;
+
+       // -------------------------------------------------------------- //
+       //Work variables                                                 //    
+       // -------------------------------------------------------------- //
+       Dcl-S SlRRN      Packed(4:0);
+       Dcl-S SvRRN      Packed(4:0);
+       Dcl-S Count      Packed(4:0);
+       Dcl-S PageCnt    Packed(4:0);
+       Dcl-S DelRRN     Packed(4:0);
+       Dcl-S DRRN       Packed(4:0);
+       Dcl-S DltCnt     Packed(4:0);
+       Dcl-S CntName    Packed(1:0);
+       Dcl-S Errflg     Char(1)   Inz(*Blanks);
+       Dcl-S Optflg     Char(1)   Inz(*Blanks);
+       Dcl-S Pos2Flg    Char(1)   Inz('N');
+       Dcl-S EdtFlag    Char(1)   Inz('N');
+       Dcl-S Updsflg    Char(1)   Inz('N');
+       Dcl-S Eofflag    Char(1)   Inz('N');
+       Dcl-S AuthFlg    Char(1)   Inz('N');
+       Dcl-S CtlFlag    Char(1)   Inz('N');
+       Dcl-S CrtFlag    Char(1)   Inz('N');
+       Dcl-S DltFlg     Char(1)   Inz('N');
+       Dcl-S WrkFlg     Char(1)   Inz('N');
+       Dcl-S UpdFlag    Char(1)   Inz('N');
+       Dcl-S Etcs       Char(1)   Inz('N');
+       Dcl-S Etpr       Char(1)   Inz('N');
+       Dcl-S RptFlg     Char(1)   Inz('N');
+       Dcl-S LoadFlg    Char(1)   Inz('N');
+       Dcl-S EofFlg     Char(1)   Inz('N');
+       Dcl-S Nxtpage    Char(1)   Inz('N');
+       Dcl-S IndicatorP Pointer   Inz(%Addr(*In));
+       Dcl-S NullIndAry BinDec(4) Dim(999);
+       Dcl-S CurTStamp  Timestamp  ;
+       Dcl-S AuthAdd    Char(1)    ;
+       Dcl-S AuthUpd    Char(1)    ;
+       Dcl-S AuthDlt    Char(1)    ;
+       Dcl-S OptTxt     Char(50)   ;
+       Dcl-S EntTStamp  Timestamp  ;
+       Dcl-S UpdTstamp  Timestamp  ;
+       Dcl-S AddTstamp  Timestamp  ;
+       DCL-S Today      Date       ;
+       Dcl-S SelRrn     Packed(4:0);      //for customer Name prompt
+       Dcl-S SelRrn1    Packed(4:0);      //for Product name prompt
+       Dcl-S Saverrn    Packed(4:0);      //for customer Name prompt
+       Dcl-S Saverrn1   Packed(4:0);      //for Product name prompt
+       Dcl-S First_rec  Inz like(ORDRID) ;
+       Dcl-S Last_Rec   Inz like(ORDRID) ;
+       Dcl-S NxtPg_rec  Inz like(ORDRID) ;
+
+       // -------------------------------------------------------------- //
+       //Constant variables                                             //    
+       // -------------------------------------------------------------- //
+       Dcl-C ValidChar '0123456789';
+       Dcl-C sflsize    const(10)  ;
+       Dcl-C sflwsize   const(6)   ;
+
+       //Work variables for Send messages
+       Dcl-s MsgId     Char(07)  Inz(*Blanks)    ;
+       Dcl-s MsgF      Char(10)  Inz('ORDERMSGF');
+       Dcl-s MsgLib    Char(10)  Inz('*LIBL')    ;
+       Dcl-s MsgDta    Char(512) Inz(' ')        ;
+       Dcl-s Tmsgq     Char(10)  Inz('*PRV')     ;
+       Dcl-s Tmsgl     Char(10)  Inz('*')        ;
+       Dcl-s Msgtype   Char(10)  Inz('*INFO')    ;
+       Dcl-s RplMsgQ   Char(10)  Inz(*Blanks)    ;
+       Dcl-s RMsgQL    Char(10)  Inz(*Blanks)    ;
+
+       //****************************************************************
+       //----------------------------------------------------------- --//
+       //Mainline Routine                                             //
+       // ----------------                                              //
+       //Display                                                      //
+       // -------                                                       //
+       //Display the ORDERSPSFD  Records                              //
+       //Function keys                                                //
+       // -------------                                                 //
+       //F1  - Exit the Main Screen                                   //
+       //F2  - Exit from the prompt  Screen                            //
+       //F4  - Promt screen for Customer&Product Data                  //
+       //F5  - Clear screen field values                               //
+       //F6  - Generate spool file for order details                   //
+       //F9  - Add record into Order Header table                      //
+       //F12 - Exit from the current Screen                            //
+       //Options                                                      //
+       // -------                                                       //
+       //2  - Edit record                                             //
+       //4  - Delete                                                  //
+       //5  - Display ORDERSPSFD  Record                              //
+       // -----------------------------------------------------------   //
+       // Main Subroutine                                             //
+       // -----------------------------------------------------------   //
+       Exec Sql Set Option CloSqlCsr = *EndMod,DatFmt = *ISO ,DATSEP = '-';
+
+       Exsr Sr_ClearSfl  ;
+       Exsr Sr_LoadSfl   ;
+       Exsr Sr_DisplaySfl;
+
+       *inlr=*on;
+
+       // ------------------------------------------------------------- //
+      //  Subroutine - Sr_ClearSfl                                     //
+      //  Function - To clear and intialize the subfile                //
+       // ------------------------------------------------------------- //
+       BEGSR Sr_ClearSfl     ;
+         SlRRN = 0           ;
+         svrrn = 0           ;
+         SflDisplay = *off   ;
+         SflDspCtl  = *off   ;
+         SflClear   = *on    ;
+         WRITE ORDERCTL      ;
+         SflDisplay = *on    ;
+         SflDspCtl  = *on    ;
+         SflClear   = *Off   ;
+         SflEnd     = *Off   ;
+       ENDSR;
+
+       // ------------------------------------------------------------- //
+      //  Subroutine - Sr_LoadSfl      //KP01                          //
+      //  Function - The routine is for Build the sub file             //
+       // ------------------------------------------------------------- //
+       BEGSR Sr_LoadSfl       ;
+         PageCnt = PageCnt + 1;
+         Count = 0            ;
+         sfopt    = *Blanks;
+         RiSfOpt  = *off   ;
+         RiCtPos2 = *off   ;
+
+        //Declare cursor
+         EXEC SQL
+         Declare OrdCsr scroll Cursor For
+         SELECT ORDRID, ORCSNM, ORPRDT, ORDATE, ORPRQT FROM  ORDERHDRF
+         //WHERE ORDRID >=  :First_Rec
+         ORDER BY  ORDRID;
+
+        //Open cursor
+         EXEC SQL
+         OPEN OrdCsr ;
+
+         If SqlCod <> 0;
+           ExSr *Pssr;
+         EndIf;
+
+         Clear OrderDs ;
+
+         If Pos2Flg = 'Y' ;
+           EXEC SQL
+           Fetch Next From PosCsr into :OrderDS:NullIndAry;
+         Else;
+           EXEC SQL
+           Fetch Next From OrdCsr into:OrderDs:NullIndAry;
+         EndIf;
+
+         //Setll First_rec Orderhdrf ;
+         DoW SqlCode = 0  And SlRRN < 9999 ; // and sflsize <9;
+           SlRRN = SlRRN+1;
+           count = count+1;
+           SFORID   =  DsID    ;
+           SFORCN   =  DsName  ;
+           SFORPN   =  Dsprdt  ;
+           SFORDT   =  Dsdate  ;
+           SFORQT   =  DsPrQt  ;
+           RiSfOpt  = *off;
+           RiCtPos2 = *off;
+           Write OrderSFL;
+
+           If Count = 1;
+             Strrn  = SlRRN;
+             First_rec = DsID ;
+           EndIf;
+
+           If Slrrn   = sflsize ;
+             Last_Rec = DsID ;
+             Leave;
+           EndIf;
+
+           Clear OrderDs ;
+
+          //Fetch data from ORDERHDRF file
+           If Pos2Flg = 'Y' ;
+             EXEC SQL
+             Fetch Next From PosCsr into :OrderDS:NullIndAry;
+           Else;
+             EXEC SQL
+             Fetch Next From OrdCsr into :OrderDS:NullIndAry;
+           EndIf;
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+
+           If SqlCode = 100;
+             Eofflg   = 'Y' ;
+             //SflEnd = *On;
+             Exec Sql
+               Close OrdCsr ;
+           Else;
+             Eofflg = 'N' ;
+           //SflEnd = *Off;
+           EndIf;
+         EndDo;
+
+        // Check whether SlRRN reaches 9999
+         If SlRRN = 9999;
+           MsgId  = 'MSG0011';
+           Exsr Sr_SndMsg;
+           SflEnd = *on;
+         Endif;
+
+        //Close cursor
+         //EXEC SQL
+         //Close OrdCsr ;
+
+         If SLRRN  <> SvRRN;
+           STRRN  = SvRRN +1;
+           SvRRN  = SLRRN ;
+         EndIf;
+       ENDSR;
+
+       // ----------------------------------------------------------- //
+      //  Subroutine - Sr_DisplaySfl                                 //
+      //  Function - To display the selected records                 //
+       // ----------------------------------------------------------- //
+       BEGSR Sr_DisplaySfl;
+         DoW F1Exit = *Off ;
+           Write msgctl;
+           Write footer;
+           SflDspctl = *On;
+          // Set On the display
+           If SlRRN > 0;
+             SflDisplay = *on ;
+             If Eofflg  = 'N' ;
+               SflEnd   = *Off;
+             Else;
+               SflEnd = *On;
+             EndIf;
+           Else;
+             SflDisplay = *off;
+             write nodata;
+           Endif;
+           Write OrderCtl;
+           Read ORDERSPSFD;
+           If SflDisplay = *Off;
+             If CtPos2 <> *Blanks;
+               CtPos2 = *Blanks;
+             EndIf;
+           EndIf;
+           Strrn = irecn;
+           Spclr();
+
+           Select;
+          // F1 = Exit
+           When F1Exit = *On;
+             Exec Sql
+             Close OrdCsr;
+
+             Exec Sql
+             CLOSE PosCsr;
+             LeaveSr;
+
+          // F5 = Refresh the SFL page
+           When F5Refresh = *On;
+             Exec Sql
+             Close OrdCsr ;
+             Eofflg = 'N' ;
+             Pos2Flg = 'N' ;
+             Exec Sql
+             Close PosCsr ;
+             PageCnt = 0 ;
+             Exsr Sr_ClearSfl;
+             Exsr Sr_LoadSfl ;
+             F5Refresh = *Off ;
+
+          // F6 = Print
+           When F6Print = *On;
+             If Not %Open(ORDERSFLP);
+               Open ORDERSFLP;
+             EndIf;
+             If Slrrn > 0 ;
+               EXSR Sr_OrdersPrint ;
+               Total = *Zeros;
+               Close ORDERSFLP;
+             Else;
+               Exsr Sr_NoOrdersPrint ;
+               Total = *Zeros;
+               Close ORDERSFLP;
+             EndIf;
+             F6Print = *Off ;
+
+          // F9 = Add
+           When F9Add = *On and AuthAdd = '1';
+             Exsr Sr_AddOrder;
+             If UpdsFlg = 'Y';
+               Exsr Sr_ClearSfl;
+               Exsr Sr_LoadSfl;
+               Exsr Sr_SndMsg;
+             EndIf;
+
+          // F9 = Add Not Authorized to Add
+           When F9Add = *On and AuthAdd <> '1';
+             MsgId = 'MSG0026';
+             Exsr Sr_SndMsg;
+
+           When Pagedown = *On;
+             If Eofflg = 'N'  ;
+               Exsr Sr_ClearSfl;
+               Exsr Sr_Pagedown ;
+               Pagedown = *Off ;
+             Else;
+               MsgId = 'MSG0041';
+               Exsr Sr_SndMsg;
+             EndIf;
+
+           When PageUp = *On ;
+             If Pos2Flg <> 'Y' ;
+               Exsr Sr_Pageup ;
+             EndIf;
+             PageUp = *Off;
+
+          //Position to value entered
+           When CTPOS2 <> ' ' ;
+             OptFlg = 'N';
+             RiSfOpt  = *off;
+             RiCtPos2 = *off;
+             EXSR Sr_OptAuthValidation;
+             If AuthFlg <> 'Y';
+               Exsr Sr_ValidateOpt;
+               If optflg <> 'Y';
+                 EXSR Sr_Position2 ;
+               Else;
+                 MsgId = 'MSG0023';
+                 Exsr Sr_SndMsg;
+                 RiCtPos2 = *On;
+               EndIf;
+             Else;
+               MsgId = 'MSG0036';
+               Exsr Sr_SndMsg;
+               RiCtPos2 = *On;
+             EndIf;
+
+           Other;
+             //Subfile Options Validation
+             EXSR Sr_ValidateOpt;
+             Updsflg = 'N';
+             If errflg <> 'Y' ;
+               EXSR Sr_ValidOption;
+             EndIf;
+           Endsl;
+         EndDo;
+       ENDSR;
+
+       // ------------------------------------------------------------- //
+      //   Sr_Pagedown - Subroutine                                    //
+       // ------------------------------------------------------------- //
+       BegSr Sr_Pagedown ;
+         PageCnt = PageCnt + 1 ;
+         Count = 1;
+         Dow Count <= 10    ;
+           Slrrn = Slrrn +1 ;
+
+           If Slrrn = 9999  ;
+             MsgId = 'MSG0011' ;
+             Exsr Sr_SndMsg    ;
+             SflEnd = *on      ;
+             Pagedown = *Off   ;
+           EndIf;
+
+          //Fetch data from ORDERHDRF file
+           If Pos2Flg = 'Y' ;
+             EXEC SQL
+               Fetch Next From PosCsr into :OrderDS:NullIndAry;
+           Else;
+             EXEC SQL
+               Fetch Next From OrdCsr into :OrderDS:NullIndAry;
+           EndIf;
+
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+
+           If Count = 1;
+             Strrn = Slrrn;
+             NxtPg_rec = DsID ;
+           EndIf;
+
+           If SqlCode = 100;
+             Eofflg = 'Y'  ;
+             LoadFlg = 'Y' ;
+             LeaveSr;
+           Else;
+             count = count+1;
+             SFORID   =  DsID    ;
+             SFORCN   =  DsName  ;
+             SFORPN   =  Dsprdt  ;
+             SFORDT   =  Dsdate  ;
+             SFORQT   =  DsPrQt  ;
+             RiSfOpt  = *off;
+             RiCtPos2 = *off;
+             Write OrderSFL;
+             Strrn = 1;
+           EndIf;
+         EndDo;
+         If Pos2Flg = 'Y' ;
+           LoadFlg = 'N' ;
+         EndIf;
+         LoadFlg = 'N' ;
+         Last_Rec = DsID ;
+
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_Pageup - Subroutine          //KP02                      //
+       // ------------------------------------------------------------- //
+       BEGSR Sr_Pageup ;
+         Eofflg = 'N' ;
+         If PageCnt = 1 ;
+           //If First_Rec = DSID and PageUp = *On ;
+           MsgId = 'MSG0040' ;
+           Exsr Sr_SndMsg;
+           SflEnd = *Off ;
+           Leavesr ;
+         EndIf ;
+         PageCnt = PageCnt - 1 ;
+         If PageCnt <> 0 ;
+
+           //Setll LAST_REC orderhdrf ;
+           //Setll NxtPg_Rec orderhdrf ;
+           //ReadP ORDERHDRF ;
+
+           If LoadFlg <> 'Y' ;
+             Count = 1 ;
+             Exsr Sr_ClearSfl;
+             DoW Count <= 10  and SlRRN < 9999  ;
+               Slrrn = Slrrn + 1 ;
+
+               If Count = 1;
+                 Strrn = Slrrn;
+               EndIf;
+
+               If Slrrn = 9999;
+                 MsgId  = 'MSG0011' ;
+                 Exsr Sr_SndMsg;
+                 SflEnd   = *on;
+                 Pagedown = *Off;
+               EndIf;
+
+              //Fetch data from ORDERHDRF file
+               EXEC SQL
+               Fetch Prior From OrdCsr  into :OrderDS:NullIndAry;
+
+               If SqlCod <> 0 And SqlCod <> 100;
+                 ExSr *Pssr;
+               EndIf;
+
+               //Sfopt = *Blanks;
+               SFORID   =  DsID    ;
+               SFORCN   =  DsName  ;
+               SFORPN   =  Dsprdt  ;
+               SFORDT   =  Dsdate  ;
+               SFORQT   =  DsPrQt  ;
+               RiSfOpt  = *off;
+               RiCtPos2 = *off;
+               //Write OrderSFL;
+               //Read OrderCTL;
+               Strrn = 1;
+               count = count+1;
+
+               If SqlCode = 100 and Count <= 10 ;
+                 Strrn = 1;
+                 Eofflg = 'N' ;
+                 LeaveSr;
+               EndIf;
+             EndDo;
+           EndIf;
+           Last_Rec = DsID ;
+           //Read OrderCTL;
+
+           // First_rec = DsID   ;   //kpc1
+           // READ  OrderCTL     ;
+           // Read ORDERSPSFD    ;
+           //If LoadFlg <> 'Y' ;
+           Exsr Sr_ClearSfl;
+           SetGT Last_rec  Orderhdrf ;
+           If Count <> 11 ;
+             SetGT Last_rec  Orderhdrf ;
+             DoW Count <> 0 ;
+              //Fetch data from ORDERHDRF file
+               EXEC SQL
+               Fetch Prior From OrdCsr  into :OrderDS:NullIndAry;
+
+               Count = Count - 1 ;
+             EndDo;
+             count = 11 ;
+             LoadFlg = 'N' ;
+           EndIf;
+
+           Dow Count >  1  ;
+             Slrrn = Slrrn + 1 ;
+            //Fetch data from ORDERHDRF file
+             EXEC SQL
+               Fetch Prior From OrdCsr  into :OrderDS:NullIndAry;
+
+             If SqlCod <> 0 And SqlCod <> 100;
+               ExSr *Pssr;
+             EndIf;
+
+             SFORID  = DsID    ;
+             SFORCN  = DsName  ;
+             SFORPN  = Dsprdt  ;
+             SFORDT  = Dsdate  ;
+             SFORQT  = DsPrQt  ;
+             RiSfOpt  = *off;
+             RiCtPos2 = *off;
+             Write OrderSFL;
+             //Read ORDERSPSFD;
+             Strrn = 1;
+             Count = Count - 1 ;
+
+           EndDo;
+
+           Last_Rec = DsID ;
+           Exsr Sr_ClearSfl;
+           Setll Last_rec  Orderhdrf ;
+           Dow Count <=10   ;
+
+            //Fetch data from ORDERHDRF file
+             EXEC SQL
+               Fetch Next  From OrdCsr  into :OrderDS:NullIndAry;
+
+             If SqlCod <> 0 And SqlCod <> 100;
+               ExSr *Pssr;
+             EndIf;
+             Slrrn = Slrrn + 1 ;
+             SFORID   =  DsID    ;
+             SFORCN   =  DsName  ;
+             SFORPN   =  Dsprdt  ;
+             SFORDT   =  Dsdate  ;
+             SFORQT   =  DsPrQt  ;
+             RiSfOpt  = *off;
+             RiCtPos2 = *off;
+             Write OrderSFL;
+             //Read ORDERSPSFD;
+             Strrn = 1;
+             Count = Count + 1 ;
+
+             If SqlCode = 100;
+               Eofflg = 'N' ;
+               LeaveSr;
+             EndIf;
+           EndDo;
+
+         Else;
+           MsgId = 'MSG0040' ;
+           Exsr Sr_SndMsg;
+           SflEnd = *Off ;
+         EndIf ;
+       EndSr ;
+
+       // ------------------------------------------------------------- //
+      //   Sr_ValidateOpt - Subroutine                                 //
+       // ------------------------------------------------------------- //
+       BEGSR Sr_ValidateOpt;
+         errflg = 'N' ;
+         optflg = 'N' ;
+         Eofflg = 'N' ;
+         RiSfOpt  = *Off ;
+         RiCtPos2 = *Off ;
+         SflNxtChg= *Off;
+
+        // ********* Subfile Options Validations ************* //
+         If SlRRN > 0 ;
+           Readc OrderSfl;
+           Dow NOT %EOF();
+             RiSfOpt  = *Off;
+             If sfopt <> ' ' ;
+               optflg = 'Y';
+               if ctpos2 <> *Blanks;
+                 RiSfOpt = *On ;
+                 strrn = SlRRN;
+               endif;
+               SflNxtChg = *On;
+               select;
+               //****  Not Authorized to Update                           //
+               when (SfOpt = '2') And AuthUpd <> '1' ;
+                 RiSfOpt = *On ;
+                 errflg = 'Y';
+                 Msgid  = 'MSG0024';
+                 Exsr Sr_SndMsg;
+                 strrn = SlRRN;
+
+               //****  Not Authorized to Delete                           //
+               when (SfOpt = '4') And AuthDlt <> '1';
+                 RiSfOpt = *On ;
+                 errflg = 'Y';
+                 Msgid  = 'MSG0025';
+                 Exsr Sr_SndMsg;
+                 strrn = SlRRN;
+              //Send error message as Invalid option
+               When sfopt <> '5' and sfopt <> '4' and  sfopt <> '2' ;
+
+                 RiSfOpt = *On ;
+                 errflg  = 'Y';
+                 Msgid   = 'MSG0001';
+                 Exsr Sr_SndMsg;
+                 strrn = SlRRN;
+               EndSl;
+             endif;
+             Update OrderSfl;
+             ReadC  OrderSfl;
+           EndDo;
+         Endif;
+       ENDSR;
+
+       // ------------------------------------------------------------- //
+      //   Sr_OptAuthValidation - Subroutine                           //
+       // ------------------------------------------------------------- //
+       BEGSR Sr_OptAuthValidation;
+         AuthFlg = 'N';
+         Optflg  = 'N';
+         If SlRRN > 0 ;
+           readc OrderSfl;
+           Dow NOT %EOF();
+             RiSfOpt   = *Off;
+             RiCtPos2  = *Off;
+             SflNxtChg = *Off;
+             If sfopt <> ' ' ;
+               //optflg = 'Y';
+               if Ctpos2 <> *Blanks;
+                 RiSfOpt = *On ;
+                 strrn = SlRRN;
+               endif;
+               SflNxtChg = *On;
+               select;
+               //****  Not Authorized to Update along with position to    //
+               when (SfOpt = '2') And AuthUpd <> '1' ;
+                 RiSfOpt = *On ;
+                 AuthFlg = 'Y';
+                 strrn = SlRRN;
+
+               //****  Not Authorized to Delete                           //
+               when (SfOpt = '4') And AuthDlt <> '1' ;
+                 RiSfOpt = *On ;
+                 AuthFlg = 'Y';
+                 strrn = SlRRN;
+               // when (SfOpt = '5') ;
+               //   RiSfOpt = *On ;
+               //   AuthFlg = 'Y';
+               //   setrrn = SelRRN;
+               EndSl;
+             endif;
+             Update OrderSfl;
+             ReadC  OrderSfl;
+           EndDo;
+         Endif;
+       ENDSR;
+
+       // ----------------------------------------------------------- //
+      //   Sr_ValidOption - Subroutine                               //
+       // ----------------------------------------------------------- //
+       BEGSR Sr_ValidOption;
+         Updsflg = 'N';
+         ErrFlg = 'N';
+         If SlRRN <> 0 ;
+           Readc OrderSfl;
+           Dow NOT %EOF();
+             SflNxtChg = *on;
+             Select;
+            //When Subfile option 2 is entered with Update authority on
+             When (SfOpt = '2') And AuthUpd = '1';
+               clear OrderDs ;
+               Exec sql
+                 SELECT ORDRID, ORCSNM, ORPRDT, ORDATE,ORPRQT INTO
+                 :EDORID:NullIndAry,:EDORNM:NullIndAry,:EDORPD:NullIndAry,
+                 :EDORDT:NullIndAry, :EDORQT:NullIndAry
+                 FROM ORDERHDRF WHERE ORDRID = :SFORID;
+
+               If SqlCode <> 0  And SqlCode <> 100;
+                 Exsr *PSSR;
+               EndIf;
+
+               If sqlcod = 0 ;
+                 Exsr Sr_Edit;
+                 sfopt = *Blanks;
+               EndIf;
+              //When F12 is taken, it exits from the screen
+               If F12Cancel = *on;
+                 SFOPT = *Blanks;
+                 Sflnxtchg = *Off;
+                 F12Cancel = *off;
+                 Update OrderSfl;
+                 strrn  = SlRRN;
+                 dltflg = 'N';
+                 Leave;
+               EndIf ;
+              //Send error message as record not found to Edit
+               If SqlCod = 100;
+                 RiSfOpt = *On ;
+                 Update OrderSfl;
+                 STRRN = SLRRN;
+                 MSGID ='MSG0027';
+                 Exsr Sr_SndMsg;
+                 leave;
+               EndIf;
+               Sfopt = ' ';
+               Update OrderSfl;
+
+            //When Subfile option 5 is entered
+             When sfopt = '5';
+               Exsr Sr_Option5;
+               If SqlCod = 100;
+                 RiSfOpt = *On ;
+                 Update OrderSfl;
+                 STRRN = SLRRN;
+                 MSGID ='MSG0028';
+                 Exsr Sr_SndMsg;
+                 leave;
+               EndIf;
+              //When F12 is taken, it exits from the screen
+               If F12Cancel = *on;
+                 SFOPT     = *Blanks;
+                 RiSfOpt   = *Off;
+                 Sflnxtchg = *Off;
+                 F12Cancel = *off;
+                 Update OrderSfl;
+                 strrn = SlRRN;
+                 dltflg = 'N';
+                 leave;
+               EndIf;
+               If F6Print = *On;
+                 If Not %Open(ORDERSFLP);
+                   Open ORDERSFLP;
+                 EndIf;
+
+                 If rptflg <> 'Y';
+                   Write RPTHDR;
+                 Endif;
+                 Exsr Sr_Print ;
+               EndIf;
+               Sfopt = ' ';
+               Update OrderSfl;
+
+            //When Subfile option 4 is entered
+             When (SfOpt = '4')  And AuthDlt = '1';
+               Exec Sql
+                 SELECT ORDRID, ORCSNM, ORPRDT, ORDATE,ORPRQT INTO
+                 :DORID:NullIndAry,:DORCNM:NullIndAry,:DORPNM:NullIndAry,
+                 :DORDT:NullIndAry, :DORQT:NullIndAry
+                 FROM ORDERHDRF WHERE ORDRID = :SFORID;
+
+               If sqlcod <> 0 and sqlcod <> 100;
+                 Exsr *pssr;
+               Endif;
+               If sqlcod = 0;
+                 DltCnt =  DltCnt + 1;
+                 If DltCnt = 1;
+                   Delrrn = slrrn;
+                 Endif;
+                 If dltflg <> 'Y';
+                   Exsr Sr_DltSfClr;
+                 Endif;
+                 Exsr Sr_DltSfLoad;
+               Endif;
+
+              //Send error message as record not found to delete
+               If sqlcod = 100;
+                 RiSfOpt = *On ;
+                 MSGID ='MSG0029';
+                 Exsr Sr_SndMsg;
+               EndIf;
+               Update OrderSfl;
+
+             Endsl;
+             If sfopt <> ' ' ;
+               SflNxtChg = *On;
+             Else ;
+               SflNxtChg = *Off;
+             Endif;
+             readc OrderSfl;
+             strrn = SlRRN;
+
+           Enddo;
+           If strrn = 0 ;
+             strrn = SlRRN ;
+           EndIf;
+
+           If rptflg = 'Y';
+             Write FOOTA;
+             MsgId = 'MSG0037';
+             Exsr Sr_SndMsg;
+             Total = *Zeros;
+             Close ORDERSFLP;
+           Endif;
+
+           If dltflg = 'Y' ;
+             Exsr Sr_DltsfDsp;
+            //When F12 is taken, it exits from the screen
+             If F12Cancel = *on;
+               SFOPT = *Blanks;
+               RiSfOpt = *Off;
+               Sflnxtchg = *Off;
+               F12Cancel = *off;
+               dltflg = 'N';
+               strrn = delRRN;
+             EndIf;
+           Endif;
+
+           If Updsflg = 'Y';
+             Exsr Sr_ClearSfl;
+             Exsr Sr_LoadSfl;
+             Exsr Sr_SndMsg;
+           EndIf;
+         Endif;
+       ENDSR;
+
+       // ----------------------------------------------------------- //
+      // Sr_Edit - Subroutine                                        //
+       // ----------------------------------------------------------- //
+       BegSr Sr_Edit;
+         Updsflg = 'N';
+         Dow F12Cancel = *off;
+           Today  = %date() ;
+           Write msgctl;
+           Write EDTORDER;
+           Read  ORDERSPSFD;
+           Spclr();
+
+           RiEdCsNm  = *Off;
+           RiEdPrNm  = *Off;
+           RiEdPrQt  = *Off;
+           EdtFlag   = 'N' ;
+           CrtFlag   = 'N' ;
+           UpdFlag   = 'N' ;
+           Etcs      = 'N' ;
+           Etpr      = 'N' ;
+
+           Select;
+           When F12Cancel = *on;
+             Clear EDORNM ;
+             Clear EDORPD ;
+             Clear EDORQT ;
+             //F12Cancel = *Off;
+             leave;
+
+           When F4Prompt = *on;
+             If CSRFLD = 'EDORNM' ;
+               Etcs = 'Y';
+               Exsr Sr_NamePrompt;
+             ElseIf CSRFLD = 'EDORPD' ;
+               Etpr = 'Y';
+               Exsr Sr_ProdPrompt;
+             Else;
+               MsgId = 'MSG0014';
+               Exsr Sr_sndmsg;
+             EndIf;
+
+           When F5Refresh = *on;
+             Exsr Sr_Refresh1;
+
+           Other;
+             Exsr Sr_Updvalidate;
+             If EdtFlag <> 'Y';
+               Exsr Sr_Update ;
+               leave;
+             Endif;
+           Endsl;
+         Enddo;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      // Sr_Updvalidate - Subroutine                                   //
+       // ------------------------------------------------------------- //
+       BegSr Sr_Updvalidate;
+        // validate name field
+         If EDORNM <> ' ' ;
+           If %CHECK(ValidChar : %trim(EDORNM)) <> 0 ;
+
+             Exec SQL
+               Select CUSTNM, CUSTST into :DsCsNm, :DsCsSt from CUSTMSTF
+               Where CUSTNM=:EDORNM ; //and CUSTST='A';  kp01
+
+             If SqlCod <> 0 And SqlCod <> 100;
+               ExSr *Pssr;
+             EndIf;
+
+            // When Customer name not present in Customer View
+             If SqlCode = 100;
+               MsgId = 'MSG0013';
+               Exsr Sr_SndMsg;
+               RiEdCsNm  = *On;
+               EdtFlag = 'Y';
+             EndIf;
+
+            // When Customer name present in Customer View
+             If SqlCod = 0;
+               If EDORNM = SFORCN ;
+                 Exsr Sr_ChkUpdVal;
+               EndIf;
+
+               If EDORNM <> SFORCN ; //OR EDORNM = SFORCN ;
+                 If DsCsSt = 'A' ;
+                   Exsr Sr_ChkUpdVal;
+                 Else;
+                  //Send error message as Customer status is Inactive
+                   MsgId = 'MSG0034';
+                   RiEdCsNm  = *On;
+                   EdtFlag = 'Y';
+                   Exsr Sr_SndMsg;
+                 EndIf;
+               EndIf;
+             EndIf;
+           Else;
+            //Send error message as name field value should be in character
+             MsgId = 'MSG0003';
+             RiEdCsNm  = *On;
+             EdtFlag = 'Y';
+             Exsr Sr_SndMsg;
+           EndIf;
+         Else;
+          //Send error message as name field should not be blank
+           MsgId = 'MSG0002';
+           RiEdCsNm = *On;
+           EdtFlag = 'Y';
+           Exsr Sr_SndMsg;
+         EndIf;
+
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      // Sr_ChkUpdVal - Subroutine                                     //
+       // ------------------------------------------------------------- //
+       BegSr Sr_ChkUpdVal;
+        // validate Product name field
+         If EDORPD <> ' ' ;
+
+           Exec SQL
+             Select PRDTNM into :DsPrNm from PRODMSTF
+             where PRDTNM=:EDORPD ;
+
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+
+          // When Product name present in Product Master table
+           If SqlCod = 0;
+            // validate Quantity field
+             If EDORQT <> 0  ;
+               Exec sql
+                 select PRDTNM, PRTOQT, PRAVQT into :DsPrNm,:DsPrTQt,
+                 :DsPrAQt from PRODMSTF where PRDTNM =:EDORPD ;
+
+               If SqlCod <> 0 And SqlCod <> 100;
+                 ExSr *Pssr;
+               EndIf;
+
+               If EDORQT <> SFORQT ;
+                 if DsPrAQt = EDORQT ;
+                   EdtFlag = 'N';
+                 EndIf;
+
+                 If DsPrAQt <> 0 ;
+                   If DsPrAQt < EDORQT ;
+                     MsgDta = %char(DsPrAQt) ;
+                    //Send error message as &1 units available in PRODMSTF file
+                     MsgId = 'MSG0020';
+                     RiEdPrQt = *On;
+                     EdtFlag = 'Y';
+                     Exsr Sr_SndMsg;
+                   EndIf ;
+                 Else;
+                  //Send error message as Ordered product is not available
+                   MsgId = 'MSG0021';
+                   RiEdPrQt = *On;
+                   EdtFlag = 'Y';
+                   Exsr Sr_SndMsg;
+                 EndIf;
+               EndIf;
+
+             Else;
+              //Send error message as Quantity field should not be blank
+               MsgId = 'MSG0006';
+               RiEdPrQt = *On;
+               EdtFlag = 'Y';
+               Exsr Sr_SndMsg;
+             Endif;
+          // When Product name not present in Product Master table
+           Else;
+             MsgId = 'MSG0035';
+             Exsr Sr_SndMsg;
+             RiEdPrNm  = *On;
+             EdtFlag = 'Y';
+
+           Endif;
+         Else;
+          //Send error message as Product name field should not be blank
+           MsgId = 'MSG0004';
+           RiEdPrNm = *On;
+           EdtFlag = 'Y';
+           Exsr Sr_SndMsg;
+         Endif;
+       EndSr;
+
+       //-----------------------------------------------------------//
+      // Sr_Update - Subroutine - Order Update                     //
+       //-----------------------------------------------------------//
+       BegSr Sr_Update;
+         CURTSTAMP = %TIMESTAMP();
+         EDORID  = SFORID;
+         EDORDT  = SFORDT ;
+         EDORQT  = EDORQT ;
+         EDORNM  = %Trim(EDORNM);
+         EDORPD  = %Trim(EDORPD);
+        //Check Customer name,Product name,Date& quantity
+         If EDORNM <> SFORCN OR EDORPD <> SFORPN OR EDORQT <> SFORQT;
+           //  OR EDORDT <> SFORDT
+           EDORDT = Today ;
+           EXEC SQL
+           UPDATE ORDERHDRF SET ORCSNM =:EDORNM, ORPRDT =:EDORPD,
+             ORDATE = :EDORDT , ORPRQT = :EDORQT ,ORUPBY =:#PSUSR,
+             ORUPTM =:CURTSTAMP WHERE ORDRID = :SFORID;
+
+           If SqlCode <> 0 And SqlCode <> 100;
+             Exsr *PSSR;
+           EndIf;
+
+          //Send Success message on Successful Record update.
+           If SqlCode = 0  ;
+             Exec SQL
+             Select PRTOQT, PRAVQT into:DsPrTQt, :DsPrAQt From PRODMSTF
+             WHERE PRDTNM =:EDORPD ;
+
+             If SqlCode <> 0 And SqlCode <> 100;
+               Exsr *PSSR;
+             EndIf;
+
+             If sqlcode = 0;
+               Exsr Sr_UpdProduct;
+             Endif;
+             Exsr Sr_Refresh1;
+             MsgId = 'MSG0030';
+             //Exsr Sr_SndMsg;
+             Updsflg = 'Y';
+             EofFlg = 'N' ;
+             Exec Sql
+             Close OrdCsr ;
+           Endif;
+         Else;
+           SfOpt = *Blanks;
+           leavesr;
+         Endif;
+       Endsr;
+
+       //-----------------------------------------------------------//
+       // Sr_UpdProduct - Subroutine                                //
+       //-----------------------------------------------------------//
+       BegSr Sr_UpdProduct;
+         if DsPrAQt  <> 0 ;
+           If EDORPD = SFORPN ;
+             DsPrAQt = DsPrAQt - (EDORQT - SFORQT);
+           EndIf;
+
+           If EDORPD <> SFORPN ;
+             DsPrAQt = DsPrAQt -  EDORQT ;
+           EndIf;
+
+           CurTStamp = %TIMESTAMP();
+           Exec Sql
+           Update PRODMSTF set PRAVQT = :DsPrAQt, PRUPBY = :#PSUSR,
+           PRUPTM = :CurTStamp WHERE PRDTNM =:EDORPD ;
+         Endif;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_Refresh1- Subroutine - To clear add screen field valus   //
+       // ------------------------------------------------------------- //
+       BegSr Sr_Refresh1;
+         EDORNM = SFORCN ;
+         EDORPD = SFORPN ;
+         EDORQT = SFORQT ;
+       Endsr;
+
+       // ------------------------------------------------------------ //
+      //*  Sr_AddOrder  - Subroutine                                  //
+       // ------------------------------------------------------------ //
+       BegSr Sr_AddOrder;
+         Updsflg = 'N' ;
+         Dow F12Cancel = *off;
+           Today  = %date() ;
+           ADORDT = Today ;
+           Write msgctl   ;
+           Write ADDORDER ;
+           Read  ORDERSPSFD;
+           SpClr();
+           RiOrName  = *Off;
+           RiOrPrdt  = *Off;
+           RiOrQnty  = *Off;
+           CrtFlag   = 'N' ;
+           UpdFlag   = 'N' ;
+
+           Select;
+           When F12Cancel = *on;
+             Exsr Sr_Refresh;
+             F12Cancel = *off;
+             Leave;
+
+           When F4Prompt = *on;
+             If CSRFLD = 'ADORNM' ;
+               Exsr Sr_NamePrompt;
+             ElseIf CSRFLD = 'ADORPD' ;
+               Exsr Sr_ProdPrompt;
+             Else;
+              //Send Error message as Prompt not applicable for this field
+               MsgId = 'MSG0014';
+               Exsr Sr_sndmsg;
+             EndIf;
+
+           When F5Refresh = *on;
+             Exsr Sr_Refresh;
+
+           Other;
+             Exsr Sr_Validate;
+             Updsflg = 'N' ;
+             If CrtFlag <> 'Y';
+               Exsr Sr_Insert;
+               Leave;
+             EndIf;
+           EndSl;
+
+         EndDo;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      // Sr_Validate - Subroutine                                      //
+       // ------------------------------------------------------------- //
+       BegSr Sr_Validate;
+        // validate name field
+         If ADORNM <> ' ' ;
+           If %CHECK(ValidChar : %trim(ADORNM)) <> 0 ;
+
+             Exec SQL
+             Select CUSTNM, CUSTST into :DsCsNm, :DsCsSt from CUSTMSTF
+             Where CUSTNM=:ADORNM ; //and CUSTST='A';  kp01
+
+             If SqlCod <> 0 And SqlCod <> 100;
+               ExSr *Pssr;
+             EndIf;
+
+            // When Customer name present in Customer View
+             If SqlCod = 0;
+              // Check Customer status in Customer Table
+               If DsCsSt = 'A' ;
+                 Exsr Sr_ChkProduct;
+               Else;
+                // When Customer name not present in Customer View
+                 MsgId = 'MSG0034';
+                 RiOrName  = *On;
+                 CrtFlag = 'Y';
+                 Exsr Sr_SndMsg;
+               EndIf;
+             Else;
+              // When Customer name not present in Customer view
+               MsgId = 'MSG0013';
+               Exsr Sr_SndMsg;
+               RiOrName  = *On;
+               CrtFlag = 'Y';
+             EndIf;
+           Else;
+            //Send error message as name field value should be in character
+             MsgId = 'MSG0003';
+             RiOrName  = *On;
+             CrtFlag = 'Y';
+             Exsr Sr_SndMsg;
+           EndIf;
+         Else;
+          //Send error message as name field should not be blank
+           MsgId = 'MSG0002';
+           RiOrName = *On;
+           CrtFlag = 'Y';
+           Exsr Sr_SndMsg;
+         EndIf;
+
+       EndSr;
+
+       // ------------------------------------------------------------- //
+       // Sr_ChkProduct - Subroutine                                    //
+       // ------------------------------------------------------------- //
+       BegSr Sr_ChkProduct;
+        // validate Product name field
+         If ADORPD <> ' ' ;
+
+           Exec SQL
+             Select PRDTNM into :DsPrNm from PRODMSTF
+             where PRDTNM=:ADORPD ;
+
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+
+          // When Product name present in Product Master table
+           If SqlCod = 0;
+             Exsr Sr_ChkQuantity;
+           Else;
+            // When Product name not present in Product Master table
+             MsgId = 'MSG0013';
+             Exsr Sr_SndMsg;
+             RiOrPrdt  = *On;
+             CrtFlag = 'Y';
+           Endif;
+         Else;
+          //Send error message as Product name field should not be blank
+           MsgId = 'MSG0004';
+           RiOrPrdt= *On;
+           CrtFlag = 'Y';
+           Exsr Sr_SndMsg;
+         Endif;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+       // Sr_ChkQuantity - Subroutine                                   //
+       // ------------------------------------------------------------- //
+       BegSr Sr_ChkQuantity;
+        // validate Quantity field
+         If ADORQT <> 0  ;
+           Exec sql
+           select PRDTNM, PRTOQT, PRAVQT into :DsPrNm,:DsPrTQt,
+           :DsPrAQt from PRODMSTF where PRDTNM =:ADORPD ;
+
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+
+           If DsPrAQt = ADORQT ;
+             CrtFlag = 'N';
+           EndIf;
+
+           If DsPrAQt = 0 ;
+            // When Ordered product is not available in PRODMSTF file
+             MsgId = 'MSG0021';
+             RiOrQnty = *On;
+             CrtFlag = 'Y';
+             Exsr Sr_SndMsg;
+           EndIf;
+
+           If DsPrAQt < ADORQT ;
+             MsgDta = %char(DsPrAQt) ;
+             MsgId = 'MSG0020';
+             RiOrQnty = *On;
+             CrtFlag = 'Y';
+             Exsr Sr_SndMsg;
+           EndIf;
+         Else;
+          //Send error message as Quantity field should not be blank
+           MsgId = 'MSG0006';
+           RiOrQnty = *On;
+           CrtFlag = 'Y';
+           Exsr Sr_SndMsg;
+         Endif;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      //  Sr_Insert - Subroutine                                       //
+       // ------------------------------------------------------------- //
+       BegSr Sr_Insert;
+         Updsflg = 'N' ;
+         ADDTSTAMP = %timestamp();
+         ADORNM  = %trim(ADORNM);
+         ADORPD  = %trim(ADORPD);
+         ADORDT  = today ;
+         ADORQT  = ADORQT ;
+
+         EXEC SQL
+           Insert into ORDERHDRF (ORCSNM,ORPRDT,ORDATE,ORPRQT,ORCRBY,
+         ORCRTM) values (:ADORNM ,:ADORPD ,:ADORDT ,:ADORQT,:#PSUSR,
+         :ADDTSTAMP);
+
+         If SqlCode <> 0 And SqlCode <> 100;
+           Exsr *PSSR;
+         EndIf;
+
+        //Send Success message on Successful Record insert
+         If sqlcode = 0;
+
+           Exec SQL
+           Select PRTOQT, PRAVQT into:DsPrTQt, :DsPrAQt From PRODMSTF
+             WHERE PRDTNM =:ADORPD ;
+
+           If SqlCode <> 0 And SqlCode <> 100;
+             Exsr *PSSR;
+           EndIf;
+
+           If sqlcode = 0;
+             If DsPrAQt  <> 0 ;
+               //DsPrAQt = DsPrTQt - ADORQT ;
+               DsPrAQt   = DsPrAQt - ADORQT ;
+               CurTStamp = %TIMESTAMP();
+               Exec Sql
+               Update PRODMSTF set PRAVQT = :DsPrAQt, PRUPBY = :#PSUSR,
+                 PRUPTM = :CurTStamp WHERE PRDTNM =:ADORPD ;
+             Endif;
+           EndIf;
+           Exsr Sr_Refresh;
+           UpdsFlg = 'Y';
+           Eofflg  = 'N' ;
+           Exec Sql
+           Close OrdCsr ;
+           MsgId = 'MSG0032';
+           Exsr Sr_SndMsg;
+         EndIf;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_Refresh - Subroutine - To clear screen field valus       //
+       // ------------------------------------------------------------- //
+       BegSr Sr_Refresh;
+         Clear ADORNM   ;
+         Clear ADORPD   ;
+         Clear ADORDT   ;
+         Clear ADORQT   ;
+       Endsr;
+
+       // ----------------------------------------------------------- //
+      // Sr_NoOrdersPrint - Subroutine                               //
+       // ----------------------------------------------------------- //
+       BegSr Sr_NoOrdersPrint;
+         Write RPTHDR ;
+         Write FNODATA ;
+         MsgId = 'MSG0038';
+         Exsr Sr_SndMsg;
+         F6Print = *Off ;
+         LeaveSr;
+       EndSr;
+       // ----------------------------------------------------------- //
+      // Sr_OrdersPrint - Subroutine                                 //
+       // ----------------------------------------------------------- //
+       BegSr Sr_OrdersPrint;
+         //Slrrn = 0;
+         Write RPTHDR;
+
+        //Declare cursor
+         EXEC SQL
+         Declare RptOrdCsr Cursor For
+
+         SELECT ORDRID,ORCSNM,ORPRDT,ORDATE,ORPRQT FROM ORDERHDRF
+         ORDER BY  ORDRID; //ORCSNM
+
+        //Open cursor
+         EXEC SQL
+         OPEN RptOrdCsr;
+         Clear OrderDS;
+        //Fetch data from ORDERHDRF file.
+         EXEC SQL
+           FETCH NEXT FROM RptOrdCsr into :OrderDs:NullIndAry;
+
+         If SqlCod <> 0 And SqlCod <> 100;
+           ExSr *Pssr;
+         EndIf;
+
+         DoW SQLCOD = 0 ;
+           SlRRN  = SlRRN + 1;
+           PRORID = DsID   ;
+           PRCSNM = DsName ;
+           PRPDNM = Dsprdt ;
+           PRDATE = Dsdate ;
+           PRQUAN = DsPrQt ;
+           Total  = TOTAL + 1;
+
+           If *in90 = *on;
+             Write RPTHDR;
+             *in90 = *off;
+           Endif;
+
+           Write DETAIL;
+           EXEC SQL
+           Fetch Next From RptOrdCsr into:OrderDs:NullIndAry;
+
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+         EndDo;
+
+         Write FOOTA ;
+        // Send message as Record(s) printed successfully
+         MsgId = 'MSG0037';
+         Exsr Sr_SndMsg;
+
+       EndSr;
+
+       // ----------------------------------------------------------- //
+      // Sr_Print - Subroutine                                       //
+       // ----------------------------------------------------------- //
+       BegSr Sr_Print;
+         Clear OrderDS;
+         Exec SQL
+         SELECT ORDRID,ORCSNM,ORPRDT,ORDATE,ORPRQT
+         INTO :PRORID:NullIndAry,:PRCSNM:NullIndAry,:PRPDNM:NullIndAry,
+         :PRDATE:NullIndAry, :PRQUAN:NullIndAry  FROM ORDERHDRF
+         WHERE ORDRID = :SFORID;
+         Total = TOTAL + 1;
+
+         If *in90 = *on;
+           write RPTHDR;
+           *in90 = *off;
+         Endif;
+
+         Write DETAIL;
+         RptFlg = 'Y';
+       EndSr;
+
+       // ----------------------------------------------------------- //
+      // Sr_Option5 - Subroutine                                     //
+       // ----------------------------------------------------------- //
+       BEGSR Sr_Option5;
+         Clear OrderDS;
+         Exec SQL
+         SELECT ORDRID, ORCSNM, ORPRDT, ORDATE,ORPRQT
+         INTO :DSORID:NullIndAry, :DSORNM:NullIndAry,:DSORPR:NullIndAry,
+         :DSORDT:NullIndAry, :DSORQT:NullIndAry
+         FROM ORDERHDRF
+         WHERE ORDRID = :SFORID;
+
+         If SqlCode <> 0  And SqlCode <> 100;
+           Exsr *PSSR;
+         EndIf;
+        //Displays selected record data in Display screen
+         If sqlcod = 0;
+           SFOPT = *Blanks;
+           CMODE = 'Order Details' ;
+           WRITE msgctl;
+           Write DSPORDER;
+           Read  ORDERSPSFD;
+           SPCLR();
+         EndIf;
+       ENDSR;
+
+
+       // ------------------------------------------------------------ //
+      //*  Sr_Position2 - Subroutine                                  //
+       // ------------------------------------------------------------ //
+       BEGSR Sr_Position2;
+         Count = 0 ;
+         Eofflg = 'N' ;
+         Pos2Flg = 'N' ;
+         EXSR Sr_ClearSfl;
+        //Declare cursor
+         EXEC SQL
+         DECLARE PosCsr Cursor FOR
+         SELECT ORDRID, ORCSNM, ORPRDT, ORDATE, ORPRQT from ORDERHDRF
+         WHERE ORCSNM >= TRIM(:CTPOS2) ORDER BY ORCSNM,ORDRID;        //kp01
+
+        //Open cursor
+         EXEC SQL
+         OPEN PosCsr;
+
+         Clear OrderDs ;
+        //Fetch data from ORDERHDRF file.
+         EXEC SQL
+         FETCH NEXT FROM PosCsr into :OrderDs:NullIndAry;
+
+         If SqlCod <> 0 And SqlCod <> 100;
+           ExSr *Pssr;
+         EndIf;
+
+         DOW SQLCOD = 0 ;       //AND Slrrn < 9999 ;
+           SlRRN = SlRRN + 1 ;
+           Count = Count + 1 ;
+           ctpos2  = *Blanks ;
+           SFORID  =  DsID   ;
+           SFORCN  =  DsName ;
+           SFORPN  =  Dsprdt ;
+           SFORDT  =  Dsdate ;
+           SFORQT  =  DsPrQt ;
+           WRITE OrderSfl;
+           strrn = 1;
+           if count = 1;
+             strrn = SlRRN;
+           endif;
+
+           If count = Sflsize ;
+             //EXEC SQL
+             //CLOSE poscsr;
+             Pos2Flg = 'Y' ;
+             LeaveSr;
+           EndIf ;
+
+           EXEC SQL
+           Fetch Next From PosCsr into:OrderDs:NullIndAry;
+
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+
+         EndDo;
+         If Sqlcod = 100 ;
+
+           IF Ctpos2 <> *Blanks;
+            //Position to value > last record,it displays last record at the top
+             EXEC SQL
+             SELECT ORDRID, ORCSNM, ORPRDT, ORDATE, ORPRQT into
+             :Dsid:NullIndAry, :DsName:NullIndAry,:DsPrdt:NullIndAry,
+             :Dsdate:NullIndAry,:DsPrQt:NullIndAry FROM ORDERHDRF
+             ORDER BY ORCSNM DESC,ORDRID DESC
+               Fetch First row only ;
+             SlRRN   = SlRRN + 1;
+             SFORID  =  DsID   ;
+             SFORCN  =  DsName ;
+             SFORPN  =  Dsprdt ;
+             SFORDT  =  Dsdate ;
+             SFORQT  =  DsPrQt ;
+             Write OrderSfl;
+             strrn  = SlRRN;
+             Eofflg = 'Y' ;
+           Else;
+             Eofflg = 'Y' ;
+             //SflEnd = *On;
+             Exec Sql
+             Close Poscsr ;
+           EndIf;
+         EndIf;
+
+        //Close cursor
+         //EXEC SQL
+         //CLOSE PosCsr;
+
+         Ctpos2 = *Blanks;
+       ENDSR;
+
+       // ------------------------------------------------------------- //
+      //   Sr_NamePrompt - Subroutine - To clear screen field values   //
+       // ------------------------------------------------------------- //
+       BegSr Sr_NamePrompt;
+         Exsr Sr_ClrCWinSfl;
+         Exsr Sr_LoadCWinSfl;
+         Exsr Sr_DspCWinSfl;
+       Endsr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_ClrCWinSfl- Subroutine                                   //
+      //   Function - To clear and intialize the subfile               //
+       // ------------------------------------------------------------- //
+       BegSr Sr_ClrCWinSfl;
+         Selrrn  = 0;
+         saverrn = 0;
+         SETRRN  = 0;
+         CWinSflDsp    = *off;
+         CWinSflDspCtl = *off;
+         CWinSflClr    = *On ;
+         WRITE CUSTWDWCTL ;
+         CWinSflDsp    = *On ;
+         CWinSflDspCtl = *On ;
+         CWinSflClr    = *off;
+         CWinSflEnd    = *Off;
+       Endsr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_LoadCWinSfl - Subroutine                                 //
+      //   Function - The routine is for Build the sub file            //
+       // ------------------------------------------------------------- //
+       BegSr Sr_LoadCWinSfl;
+         CSWOPT   = *Blanks;
+         RiCSWOPT = *off;
+
+         //Declare cursor
+         EXEC SQL
+           Declare OrderCsr scroll Cursor For
+         SELECT CUSTID,CUSTNM,CUSTCT, CUSTST FROM CUSTMSTV ;
+
+         //Open cursor
+         EXEC SQL
+         OPEN OrderCsr;
+
+         If SqlCod <> 0;
+           ExSr *Pssr;
+         EndIf;
+
+         Clear CustomerDs;
+         EXEC SQL
+           Fetch Next From OrderCsr into:CustomerDs:NullIndAry;
+
+         If SqlCod <> 0 And SqlCod <> 100;
+           ExSr *Pssr;
+         EndIf;
+
+         EXSR Sr_LOAD;
+
+         //Close cursor
+         EXEC SQL
+         Close OrderCsr ;
+
+         If SelRrn  <> SaveRRN;
+           SETRRN   = SaveRRN +1;
+           SaveRRN  = SelRrn ;
+         EndIf;
+       Endsr;
+
+       //**************** Sr_LOAD - SubRoutine *************************//
+       BEGSR Sr_LOAD;
+         Count = 0;
+         //SelRrn = saverrn;
+         // Load Subfile
+         DoW SqlCode = 0 And SelRrn < 9999 ;
+           SelRrn = SelRrn + 1;
+           Count = Count+1;
+           CSWOPT= *Blanks;
+           CSWID = DsCsId ;
+           CSWNM = DsCsNm ;
+           CSWCT = DsCsCt ;
+           CSWST = DsCsSt ;
+           RiCSWOPT = *off;
+           WRITE CUSTWDWSFL ;
+
+           If count = 1;
+             setrrn = SelRrn ;
+           Endif;
+
+           Clear CustomerDs;
+
+           //Fetch data from CUSTMSTV view
+           EXEC SQL
+           Fetch Next From OrderCsr into :CustomerDs:NullIndAry;
+
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+
+         EndDo;
+
+         // Check whether SelRrn  reaches 9999
+         If SelRrn = 9999;
+           MsgId = 'MSG0012';
+           Exsr Sr_SndMsg;
+           CWinSflEnd = *on;
+         Endif;
+       Endsr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_DspCWinSfl - Subroutine                                  //
+      //   Function - To display the selected records                  //
+       // ------------------------------------------------------------- //
+       BegSr Sr_DspCWinSfl;
+         DoW F2Previous = *off;
+
+           Write WINFOOTER;
+           Write WMSGCTL;
+
+           // Set On the display
+           If SelRrn > 0;
+             CWinSflDsp = *On;
+           Else;
+             //  Writing of no record condition
+             CWinSflDsp = *Off;
+             CSWOPT = *Blanks;
+             Write nodata1;
+           EndIf;
+
+           Write CUSTWDWCTL;
+           Read  ORDERSPSFD;
+           RiCSWOPT  = *Off;
+           WrkFlg = 'N';
+           SetRrn = irecn;
+           Spclr();
+
+           Select;
+           // When F2 Previous is taken
+           When F2Previous = *On;
+             F2Previous = *Off;
+             Leave;
+
+           Other;
+             EXSR Sr_SflCInvalidOpt;
+             If ErrFlg <> 'Y' ;
+               EXSR Sr_SflCValidOpt;
+               If WrkFlg = 'Y';
+                 Leave;
+               EndIf;
+
+             Else;
+               //Send Error message as Invalid Option                         
+               MsgId = 'MSG0001';
+               Exsr Sr_SndMsg;
+             EndIf;
+           EndSl;
+         EndDo;
+
+       Endsr;
+
+      // -------------------------------------------------------------- //
+       //Subroutine - Sr_SflCInvalidOpt                                //
+       // -------------------------------------------------------------- //
+       BegSr Sr_SflCInvalidOpt;
+         ErrFlg = 'N';
+         If SelRRN > 0 ;
+           Readc CUSTWDWSFL;
+           Dow NOT %EOF();
+             RiCSWOPT  = *Off;
+             SflNxtChg = *Off;
+             If CSWOPT <> ' ' ;
+               SflNxtChg = *On;
+               Select;
+               When CSWOPT <> '1' ;
+                 RiCSWOPT  = *On ;
+                 ErrFlg = 'Y';
+                 setrrn = SelRRN;
+               EndSl;
+             EndIf;
+             Update CUSTWDWSFL;
+             Readc  CUSTWDWSFL;
+           EndDo;
+         EndIf;
+       EndSr;
+
+      // -------------------------------------------------------------- //
+       //Subroutine - Sr_SflCValidOpt                                  //
+       // -------------------------------------------------------------- //
+       BegSr Sr_SflCValidOpt;
+         ErrFlg = 'N';
+         If SelRRN <> 0 ;
+           Readc CUSTWDWSFL;
+           Dow NOT %EOF();
+             SflNxtChg = *on;
+             //select;
+             //when CSWOPT = '1';
+             If CSWOPT = '1';
+               Exsr Sr_SflCOpt1 ;
+               If sqlcod = 0;
+                 CSWOPT  = *Blanks;
+                 ADORNM  = CSWNM ;
+                 If Etcs = 'Y';
+                   EDORNM = CSWNM;
+                   Clear ADORNM ;
+                 EndIf;
+                 WrkFlg ='Y';
+                 Exec Sql
+                 Close OrderCsr ;
+               EndIf;
+             EndIf;
+             //EndSl;
+
+             If CSWOPT <> ' ' ;
+               SflNxtChg = *On;
+             Else ;
+               SflNxtChg = *Off;
+             EndIf;
+
+             Update CUSTWDWSFL;
+             Readc  CUSTWDWSFL;
+             Setrrn = SelRRN;
+           EndDo;
+         EndIf;
+
+         If Setrrn = 0 ;
+           Setrrn = SelRRN ;
+         EndIf;
+       EndSr;
+
+      // -------------------------------------------------------------- //
+       //Subroutine - Sr_SflCOpt1                                      //
+       // -------------------------------------------------------------- //
+       BegSr Sr_SflCOpt1 ;
+         Clear CustomerDS;
+
+         Exec SQL
+         SELECT CUSTNM into :CSWNM:NullIndAry from CUSTMSTV
+         WHERE CUSTID = :CSWID;
+
+         If SqlCode <> 0  And SqlCode <> 100;
+           Exsr *PSSR;
+         EndIf;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_ProdPrompt - Subroutine - To clear screen field values   //
+       // ------------------------------------------------------------- //
+       BegSr Sr_ProdPrompt;
+         Exsr Sr_ClrPWinSfl;
+         Exsr Sr_LoadPWinSfl;
+         Exsr Sr_DspPWinSfl;
+       Endsr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_ClrPWinSfl- Subroutine                                   //
+      //   Function - To clear and intialize the subfile               //
+       // ------------------------------------------------------------- //
+       BegSr Sr_ClrPWinSfl;
+         Selrrn1 = 0;
+         saverrn1= 0;
+         SETRRN1 = 0;
+         PWinSflDsp    = *off;
+         PWinSflDspCtl = *off;
+         PWinSflClr    = *On ;
+         WRITE PRODWDWCTL ;
+         PWinSflDsp    = *On ;
+         PWinSflDspCtl = *On ;
+         PWinSflClr    = *off;
+         PWinSflEnd    = *Off;
+       Endsr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_LoadPWinSfl - Subroutine                                 //
+      //   Function - The routine is for Build the sub file            //
+       // ------------------------------------------------------------- //
+       BegSr Sr_LoadPWinSfl;
+         PRWOPT   = *Blanks;
+         RiPRWOPT = *off;
+
+         //Declare cursor
+         EXEC SQL
+           Declare ProdtCsr scroll Cursor For
+           SELECT PRODID,PRDTNM,PRTOQT, PRAVQT FROM PRODMSTF ;
+
+         //Open cursor
+         EXEC SQL
+           OPEN ProdtCsr;
+
+         If SqlCod <> 0;
+           ExSr *Pssr;
+         EndIf;
+
+         Clear ProductDs ;
+         EXEC SQL
+         Fetch Next From ProdtCsr into:ProductDs:NullIndAry;
+
+         If SqlCod <> 0 And SqlCod <> 100;
+           ExSr *Pssr;
+         EndIf;
+
+         EXSR Sr_LOAD1;
+
+         //Close cursor
+         EXEC SQL
+           Close ProdtCsr ;
+
+         If SelRrn1 <> SaveRRN1;
+           SETRRN1   = SaveRRN1 +1;
+           SaveRRN1  = SelRrn1 ;
+         EndIf;
+       Endsr;
+
+       //**************** Sr_LOAD1 - SubRoutine *************************//
+       BEGSR Sr_LOAD1;
+         count = 0;
+         //SelRrn1 = saverrn1;
+         // Load Subfile
+         DoW SqlCode = 0 And SelRrn1 < 9999 ;
+           SelRrn1 = SelRrn1 + 1;
+           count   = count + 1;
+           PRWOPT  = *Blanks;
+           PRWID   = DsPrId ;
+           PRWNM   = DsPrNm ;
+           PRTQT   = DsPrTQt;
+           PRAQT   = DsPrAQt;
+           RiPRWOPT = *off;
+           WRITE PRODWDWSFL ;
+
+           If count = 1;
+             setrrn1 = SelRrn1 ;
+           Endif;
+
+           Clear ProductDs;
+
+           //Fetch data from PRODMSTF table
+           EXEC SQL
+           Fetch Next From ProdtCsr into :ProductDs:NullIndAry;
+
+           If SqlCod <> 0 And SqlCod <> 100;
+             ExSr *Pssr;
+           EndIf;
+         EndDo;
+
+         // Check whether SelRrn  reaches 9999
+         If SelRrn1 = 9999;
+           MsgId = 'MSG0012';
+           Exsr Sr_SndMsg;
+           PWinSflEnd = *on;
+         Endif;
+       Endsr;
+
+       // ------------------------------------------------------------- //
+      //   Sr_DspPWinSfl - Subroutine                                  //
+      //   Function - To display the selected records                  //
+       // ------------------------------------------------------------- //
+       BegSr Sr_DspPWinSfl;
+         DoW F2Previous = *off;
+
+           Write WINFOOTER;
+           Write WMSGCTL;
+
+           // Set On the display
+           If SelRrn1 > 0;
+             PWinSflDsp = *On;
+           Else;
+             //  Writing of no record condition
+             PWinSflDsp = *Off;
+             PRWOPT = *Blanks;
+             Write nodata1;
+           EndIf;
+
+           Write PRODWDWCTL;
+           Read  ORDERSPSFD;
+           RiPRWOPT = *Off;
+           WrkFlg   = 'N';
+           SetRrn1  = irecn;
+           Spclr();
+
+           Select;
+           // When F2 Previous is taken
+           When F2Previous = *On;
+             Exec Sql
+             Close ProdtCsr ;
+             F2Previous = *Off;
+             Leave;
+
+           Other;
+             EXSR Sr_SflPInvalidOpt;
+             If ErrFlg <> 'Y' ;
+               EXSR Sr_SflPValidOpt;
+               If WrkFlg = 'Y';
+                 Leave;
+               EndIf;
+
+             Else;
+               MsgId = 'MSG0001';
+               Exsr Sr_SndMsg;
+             EndIf;
+           EndSl;
+         EndDo;
+
+       Endsr;
+
+      // -------------------------------------------------------------- //
+       //Subroutine - Sr_SflCInvalidOpt                                //
+       // -------------------------------------------------------------- //
+       BegSr Sr_SflPInvalidOpt;
+         ErrFlg = 'N';
+         If SelRRN1 > 0 ;
+           Readc PRODWDWSFL;
+           Dow NOT %EOF();
+             RiPRWOPT  = *Off;
+             SflNxtChg = *Off;
+
+             If PRWOPT <> ' ' ;
+               SflNxtChg = *On;
+               Select;
+               When PRWOPT <> '1' ;
+                 RiPRWOPT  = *On ;
+                 ErrFlg = 'Y';
+                 SetRrn1 = SelRRN1;
+               EndSl;
+             EndIf;
+
+             Update PRODWDWSFL;
+             Readc  PRODWDWSFL;
+           EndDo;
+         EndIf;
+       EndSr;
+
+      // -------------------------------------------------------------- //
+       //Subroutine - Sr_SflValidOpt                                   //
+       // -------------------------------------------------------------- //
+       BegSr Sr_SflPValidOpt;
+         ErrFlg = 'N';
+         If SelRRN1 <> 0 ;
+           Readc PRODWDWSFL;
+           Dow NOT %EOF();
+             SflNxtChg = *on;
+
+             If PRWOPT = '1';
+               Exsr Sr_SflPOpt1 ;
+               If sqlcod = 0;
+                 PRWOPT  = *Blanks;
+                 ADORPD  = PRWNM ; //ADPRNM
+                 If Etpr = 'Y';
+                   EDORPD = PRWNM;
+                   Clear ADORPD ;
+                 EndIf;
+                 WrkFlg ='Y';
+                 Exec Sql
+                 Close ProdtCsr ;
+               EndIf;
+             EndIf;
+
+             If PRWOPT <> ' ' ;
+               SflNxtChg = *On;
+             Else ;
+               SflNxtChg = *Off;
+             EndIf;
+
+             Update PRODWDWSFL;
+             Readc  PRODWDWSFL;
+             Setrrn1 = SelRRN1;
+           EndDo;
+         EndIf;
+
+         If Setrrn1 = 0 ;
+           Setrrn1 = SelRRN1 ;
+         EndIf;
+       EndSr;
+
+      // -------------------------------------------------------------- //
+       //Subroutine - Sr_SflPOpt1                                      //
+       // -------------------------------------------------------------- //
+       BegSr Sr_SflPOpt1 ;
+         Clear ProductDS;
+         Exec SQL
+         SELECT PRDTNM into :PRWNM:NullIndAry from PRODMSTF  //ADPRNM
+         WHERE PRODID = :PRWID;
+
+         If SqlCode <> 0  And SqlCode <> 100;
+           Exsr *PSSR;
+         EndIf;
+
+         DsPrId = PRWID ;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      //  Subroutine - Sr_DltSfClr                                     //
+      //  Function - To clear and intialize the delete subfile         //
+       // ------------------------------------------------------------- //
+       BEGSR Sr_DltSfClr;
+         DltRRN = 0;
+         STRRN = 0;
+         Drrn = 0;
+         Svrrn  = 0;
+         SflDltDsp = *off;
+         SflDltDspCtl = *off;
+         SflDltClear = *on;
+         WRITE DLTCTL;
+         SflDltDsp = *on;
+         SflDltDspCtl = *on;
+         SflDltClear = *Off;
+         SflDltEnd = *on ;
+       ENDSR;
+
+       // ------------------------------------------------------------- //
+      //********* Sr_DeleteDisplay - Subroutine *************
+       // ------------------------------------------------------------- //
+       Begsr Sr_DeleteDisplay;
+         DltRRN      = 0;
+         SflDltClear = *On ;
+         Write DltCtl;
+         SflDltClear = *Off;
+         SflDltDspCtl = *on;
+         If DltRRN < 9999;
+           DORID    =  SFORID  ;
+           DORCNM   =  SFORCN  ;
+           DORPNM   =  SFORPN  ;
+           DORDT    =  SFORDT  ;
+           DORQT    =  SFORQT  ;
+           DltRRN = DltRRN + 1;
+           Write DltSfl;
+         EndIf;
+         StRRN = DltRRN;
+         If Sfopt <> ' ';
+           Sflnxtchg = *On;
+           Update OrderSfl;
+         EndIf;
+       EndSr;
+
+       // ------------------------------------------------------------- //
+      //********* Sr_DltSfLoad - Subroutine *************
+       // ------------------------------------------------------------- //
+       BEGSR Sr_DltSfLoad;
+         count = 0;
+        // Load Delete Subfile
+         If DLTRRN < 9999 ;
+           DORID    =  SFORID ;
+           DORCNM   =  SFORCN  ;
+           DORPNM   =  SFORPN  ;
+           DORDT    =  SFORDT  ;
+           DORQT    =  SFORQT  ;
+           DLTRRN = DLTRRN+1;
+           Write DltSfl;
+           dltflg = 'Y';
+         Endif;
+         If dltrrn > 0;
+           SflDltDsp = *On ;
+         Else;
+           SflDltDsp = *off;
+           write Nodata;
+         Endif;
+         StRRN = DltRRN;
+         If Sfopt <> ' ';
+           Sflnxtchg = *On;
+         EndIf;
+       ENDSR;
+
+       // ------------------------------------------------------------- //
+      //  Subroutine - Sr_DltsfDsp                                     //
+      //  Function - To Display the delete subfile                     //
+       // ------------------------------------------------------------- //
+       BEGSR Sr_DltsfDsp;
+         Drrn = Dltrrn;
+         Dltrrn = 1;
+         Write msgctl;
+         Write DELFOOTER;
+         Write dltctl ;
+         Read ORDERSPSFD;
+         Spclr();
+
+         Select;
+        // F12 = On (Exit from the current screen)
+         when F12Cancel = *On;
+           LeaveSr;
+
+         Other;
+           Exsr Sr_Delete;
+         EndSl;
+       ENDSR;
+
+      // -------------------------------------------------------------- //
+       //Delete Functionality                                          //
+       // -------------------------------------------------------------- //
+       BegSr Sr_Delete;
+         DoW DltCnt <> 0 and DltCnt <= drrn;
+           Chain DltCnt DltSfl;
+          // delete records
+           Exec SQL
+           Delete FROM ORDERHDRF  WHERE ORDRID =  :DORID;
+           DltCnt = DltCnt - 1;
+
+          //Send Success message on Successful Record Deletion
+           If SqlCod = 0;
+             MSGID ='MSG0031';
+             Updsflg = 'Y';
+             Eofflg = 'N' ;
+             Exec Sql
+             Close OrdCsr ;
+           EndIf;
+         EndDo;
+       EndSr;
+
+      // -------------------------------------------------------------- //
+       //Error message                                                 //
+       // -------------                                                  //
+       //1. Use sub program to display error messages for invalid      //
+       //   functionality                                              //
+       // -------------------------------------------------------------- //
+       Begsr Sr_SndMsg;
+         If MsgId  <> *Blanks;
+           SpSndPgm(MsgId:MsgF:MsgLib:MsgDta:
+           TMsgq:TMsgL:MsgType:RplMsgQ:RMsgQL);
+         Else;
+           SpClr();
+         Endif;
+       EndSr;
+       // -------------------------------------------------------------- //
+      //   *INZSR  - Subroutine                                         //
+       // -------------------------------------------------------------- //
+       Begsr  *Inzsr;
+         //Check Security Indicators                                   //
+         In Lda;
+
+         If LdPgm <> #PSPGM;
+           LdPgm = #PSPGM;
+           Out Lda;
+           CallP Security();
+           In Lda;
+         EndIf;
+         AuthAdd  = *Off ;
+         AuthUpd  = *Off ;
+         AuthDlt  = *Off ;
+
+         //Add Authority is on                                         //
+         If LDIn01 = *On ;
+           AuthAdd = *On ;
+           ADFN = 'F9=Add' ;
+         EndIf;
+
+         //Update Authority is on                                      //
+         If LDIn02 = *On ;
+           AuthUpd = *On ;
+           CTTEXT  = '2=Edit';
+         EndIf;
+
+         //Delete Authority is on                                      //
+         If LDIn04 = *On ;
+           AuthDlt = *On ;
+           CTTEXT  = %Trim(CTTEXT ) + ' ' + ' ' +' ' + '4=Delete';
+         EndIf;
+
+         If CTTEXT = *Blanks;
+           CTTEXT  ='5=Display';
+         Else;
+           CTTEXT = %Trim(CTTEXT ) + ' ' + ' ' +' ' +'5=Display';
+         EndIf;
+
+         OptTxt = CTTEXT  ;
+
+         In LDA ;
+         CMPNAME    = LDCNAM ;
+         MCNAME     = LDSYSN ;
+         AREA       = LDAREA ;
+         DISTRICT   = LDRDST ;
+         LOCNUMBER  = LDDIST ;
+         Out LDA ;
+       Endsr;
+
+       // -------------------------------------------------------------- //
+      //   *PSSR   - Subroutine                                         //
+       // -------------------------------------------------------------- //
+       BegSr *PSSR;
+         If #PSFSI = '01331';
+           callp SPCNLRPG(PSSA);
+         Endif;
+         Callp FPEPGMER(PSSA);
+       EndSr;
