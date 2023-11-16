@@ -1,0 +1,410 @@
+A*----------------------------------------------------------------
+     A*MAIN SCREEN
+     A*----------------------------------------------------------------
+     A*%%EC
+     A                                      DSPSIZ(24 80 *DS3)
+     A                                      PAGEDOWN(66)
+     A                                      PAGEUP(67)
+     A          R ORDERSFL                  SFL
+     A*%%TS  SD  20210210  012922  KOLLURP2    REL-V7R4M0  5770-WDS
+     A  99                                  SFLNXTCHG
+     A            SLRRN          4S 0H
+     A            SFOPT          1A  B  9  3
+     A  36                                  DSPATR(RI)
+     A  36                                  DSPATR(PC)
+     A            SFORID         5Y 0O  9 10EDTCDE(Z)
+     A            SFORCN        15A  O  9 22
+     A            SFORPN        15A  O  9 40
+     A            SFORDT          L  O  9 58
+     A            SFORQT         4Y 0O  9 71EDTCDE(Z)
+     A          R ORDERCTL                  SFLCTL(ORDERSFL)
+     A*%%TS  SD  20210210  014234  KOLLURP2    REL-V7R4M0  5770-WDS
+     A**                                    SFLSIZ(0010)
+     A**                                    SFLSIZ(0010)
+     A**                                    SFLPAG(0008)
+     A                                      CA01(01 'EXIT')
+     A                                      CF05(05 'REFRESH')
+     A                                      CF06(06 'PRINT')
+     A                                      CF09(09 'ADD')
+     A                                      RTNCSRLOC(&CSRREC &CSRFLD &CSRPOS)
+     A                                      OVERLAY
+     A  37                                  SFLDSP
+     A  38                                  SFLDSPCTL
+     A  39                                  SFLCLR
+     A  40                                  SFLEND(*MORE)
+     A                                      SFLSIZ(0010)
+     A                                      SFLPAG(0010)
+     A  41        STRRN          4S 0H      SFLRCDNBR(CURSOR)
+     A            CSRREC        10A  H
+     A            CSRFLD        10A  H
+     A            CSRPOS         4S 0H
+     A            #PSJOB        10A  O  1  2
+     A            #PSPGM        10A  O  2  2
+     A            CMPNAME       24A  O  1 29COLOR(WHT)
+     A                                  2 34'Order Details'
+     A                                  1 73DATE
+     A                                      EDTCDE(Y)
+     A                                  2 73TIME
+     A                                  5  2'Type Option, Press Enter.'
+     A                                      COLOR(BLU)
+     A            CTTEXT        50A  O  6  2COLOR(BLU)
+     A                                  8  3'Opt'
+     A                                      COLOR(WHT)
+     A                                  8 10'Order ID'
+     A                                      COLOR(WHT)
+     A                                  8 22'Customer Name'
+     A                                      COLOR(WHT)
+     A                                  8 40'Product Name'
+     A                                      COLOR(WHT)
+     A                                  8 58'Order Date'
+     A                                      COLOR(WHT)
+     A                                  8 71'Quantity'
+     A                                      COLOR(WHT)
+     A                                  4 53'Position to...:'
+     A            CTPOS2        10A  B  4 70
+     A  42                                  DSPATR(RI)
+     A  42                                  DSPATR(PC)
+    A*ORDER DETAILS SCREEN
+     A          R DSPORDER
+     A*%%TS  SD  20210205  062225  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      CF06(06 'PRINT')
+     A                                      CF12(12 'CANCEL')
+     A                                      RTNCSRLOC(&CSRRCD &CSRFLD)
+     A                                      OVERLAY
+     A            #PSJOB        10A  O  1  2
+     A            #PSPGM        10A  O  2  2
+     A            CMPNAME       24A  O  1 29COLOR(WHT)
+     A                                  1 73DATE
+     A                                      EDTCDE(Y)
+     A                                  2 73TIME
+     A            CSRFLD        10A  H
+     A            CSRRCD        10A  H
+     A            LIN#           3S 0H
+     A            POS#           3S 0H
+     A            CMODE         15A  O  2 34
+     A                                  7  4'Order ID         :'
+     A                                      COLOR(WHT)
+     A                                  8  4'Customer Name    :'
+     A                                      COLOR(WHT)
+     A                                  9  4'Product Name     :'
+     A                                      COLOR(WHT)
+     A                                 10  4'Order Date       :'
+     A                                      COLOR(WHT)
+     A                                 11  4'Product Quantity :'
+     A                                      COLOR(WHT)
+     A            DSORID         5Y 0O  7 24EDTCDE(Z)
+     A            DSORNM        15A  O  8 24
+     A            DSORPR        15A  O  9 24
+     A            DSORDT          L  O 10 24
+     A            DSORQT         4Y 0O 11 24EDTCDE(Z)
+     A                                 23  2'F6=Print'
+     A                                      COLOR(BLU)
+     A                                 23 13'F12=Cancel'
+     A                                      COLOR(BLU)
+    A*ORDER CREATION
+     A          R ADDORDER
+     A*%%TS  SD  20210208  012918  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      CF04(04 'PROMPT')
+     A                                      CF05(05 'REFRESH')
+     A                                      CF12(12 'CANCEL')
+     A                                      OVERLAY
+     A                                      RTNCSRLOC(&CSRRCD &CSRFLD &CSRPOS)
+     A            #PSJOB        10A  O  1  2
+     A            #PSPGM        10A  O  2  2
+     A            CMPNAME       24A  O  1 29COLOR(WHT)
+     A                                  2 34'Order Creation'
+     A            CSRRCD        10A  H
+     A            CSRFLD        10A  H
+     A            CSRPOS         4S 0H
+     A                                  1 73DATE
+     A                                      EDTCDE(Y)
+     A                                  2 73TIME
+     A                                  8  4'Customer Name   +:'
+     A                                      COLOR(WHT)
+     A                                  9  4'Product NAME    +:'
+     A                                      COLOR(WHT)
+     A                                 10  4'Order Date       :'
+     A                                      COLOR(WHT)
+     A                                 11  4'Product Quantity :'
+     A                                      COLOR(WHT)
+     A                                 23  2'F4=Prompt(+)'
+     A                                      COLOR(BLU)
+     A                                 23 17'F5=Refresh'
+     A                                      COLOR(BLU)
+     A            ADORNM        15A  B  8 23COLOR(TRQ)
+     A  56                                  DSPATR(RI)
+     A  56                                  DSPATR(PC)
+     A            ADORPD        15A  B  9 23COLOR(TRQ)
+     A  57                                  DSPATR(RI)
+     A  57                                  DSPATR(PC)
+     A            ADORDT          L  O 10 23
+     A**          ADORDT          L  B 10 23MAPVAL(('01/01/0001' *BLANK))
+     A**                                    DATFMT(*USA)
+     A**62                                  DSPATR(RI)
+     A**62                                  DSPATR(PC)
+     A**                                    COLOR(TRQ)
+     A            ADORQT         4S 0B 11 23COLOR(TRQ)
+     A  58                                  DSPATR(RI)
+     A  58                                  DSPATR(PC)
+     A                                 23 30'F12=Cancel'
+     A                                      COLOR(BLU)
+    A*ORDER UPDATE
+     A          R EDTORDER
+     A*%%TS  SD  20210211  004127  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      CF04(04 'PROMPT')
+     A                                      CF05(05 'REFRESH')
+     A                                      CF12(12 'CANCEL')
+     A                                      OVERLAY
+     A                                      RTNCSRLOC(&CSRRCD &CSRFLD &CSRPOS)
+     A            #PSJOB        10A  O  1  2
+     A            #PSPGM        10A  O  2  2
+     A            CMPNAME       24A  O  1 29COLOR(WHT)
+     A                                  2 35'Order Update'
+     A            CSRRCD        10A  H
+     A            CSRFLD        10A  H
+     A            CSRPOS         4S 0H
+     A                                  1 73DATE
+     A                                      EDTCDE(Y)
+     A                                  2 73TIME
+     A                                  9  4'Customer Name   +:'
+     A                                      COLOR(WHT)
+     A                                 10  4'Product NAME    +:'
+     A                                      COLOR(WHT)
+     A                                 11  4'Order Date       :'
+     A                                      COLOR(WHT)
+     A                                 12  4'Product Quantity :'
+     A                                      COLOR(WHT)
+     A                                 23  2'F4=Prompt(+)'
+     A                                      COLOR(BLU)
+     A                                 23 17'F5=Refresh'
+     A                                      COLOR(BLU)
+     A            EDORNM        15A  B  9 23COLOR(TRQ)
+     A  84                                  DSPATR(RI)
+     A  84                                  DSPATR(PC)
+     A            EDORPD        15A  B 10 23COLOR(TRQ)
+     A  85                                  DSPATR(RI)
+     A  85                                  DSPATR(PC)
+     A            EDORDT          L  O 11 23
+     A**          ADORDT          L  B 11 23MAPVAL(('01/01/0001' *BLANK))
+     A**                                    DATFMT(*USA)
+     A**62                                  DSPATR(RI)
+     A**62                                  DSPATR(PC)
+     A**                                    COLOR(TRQ)
+     A            EDORQT         4S 0B 12 23COLOR(TRQ)
+     A  86                                  DSPATR(RI)
+     A  86                                  DSPATR(PC)
+     A                                 23 30'F12=Cancel'
+     A                                      COLOR(BLU)
+     A                                  8  4'Order ID         :'
+     A                                      COLOR(WHT)
+     A            EDORID         5Y 0O  8 23EDTCDE(Z)
+    A**Main Subfile Footer
+     A          R FOOTER
+     A*%%TS  SD  20210210  020113  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      CA01(01 'EXIT')
+     A                                      CF05(05 'REFRESH')
+     A                                      CF06(06 'PRINT')
+     A                                      CF09(09 'ADD')
+     A                                      OVERLAY
+     A                                 23  2'F1=Exit'
+     A                                      COLOR(BLU)
+     A                                 23 12'F5=Refresh'
+     A                                      COLOR(BLU)
+     A                                 23 25'F6=Print'
+     A                                      COLOR(BLU)
+     A**                               23 36'F9=Add'
+     A**                                    COLOR(BLU)
+     A            ADFN           7A  O 23 36COLOR(BLU)
+    A**Delete Subfile Screen.
+     A          R DLTSFL                    SFL
+     A*%%TS  SD  20210210  020113  KOLLURP2    REL-V7R4M0  5770-WDS
+     A  99                                  SFLNXTCHG
+     A            DORID          5Y 0O 10  2EDTCDE(Z)
+     A            DORCNM        15A  O 10 16
+     A            DORPNM        15A  O 10 37
+     A            DORDT           L  O 10 58
+     A            DORQT          4Y 0O 10 71EDTCDE(Z)
+     A          R DLTCTL                    SFLCTL(DLTSFL)
+     A*%%TS  SD  20210212  052448  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      SFLSIZ(0100)
+     A                                      SFLPAG(0008)
+     A                                      CF12(12 'CANCEL')
+     A                                      RTNCSRLOC(&CSRRCD &CSRFLD)
+     A                                      OVERLAY
+     A  80                                  SFLDSP
+     A  81                                  SFLDSPCTL
+     A  82                                  SFLCLR
+     A  83                                  SFLEND(*MORE)
+     A  84        DLTRRN         4S 0H      SFLRCDNBR(CURSOR)
+     A            #PSJOB        10A  O  1  2
+     A            #PSPGM        10A  O  2  2
+     A            CMPNAME       24A  O  1 29COLOR(WHT)
+     A                                  2 35'Delete Order'
+     A                                  1 73DATE
+     A                                      EDTCDE(Y)
+     A                                  2 73TIME
+     A            CSRFLD        10A  H
+     A            CSRRCD        10A  H
+     A            LIN#           3S 0H
+     A            POS#           3S 0H
+     A                                  6  2'Press Enter to confirm your choice-
+     A                                       for Delete.'
+     A                                      COLOR(BLU)
+     A                                  7  2'Press F12=Cancel to return to chan-
+     A                                      ge your choices.'
+     A                                      COLOR(BLU)
+     A                                  9  2'Order ID'
+     A                                      COLOR(WHT)
+     A                                  9 16'Customer Name'
+     A                                      COLOR(WHT)
+     A                                  9 37'Product Name'
+     A                                      COLOR(WHT)
+     A                                  9 58'Order Date'
+     A                                      COLOR(WHT)
+     A                                  9 71'Quantity'
+     A                                      COLOR(WHT)
+     A          R DELFOOTER
+     A*%%TS  SD  20201214  041830  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      CF12(12 'CANCEL')
+     A                                      OVERLAY
+     A                                 23  2'F12=Cancel'
+     A                                      COLOR(BLU)
+    A**No Data Screen
+     A          R NODATA
+     A                                      OVERLAY
+     A                                 15 18'****No Data Found To Display****'
+     A                                      COLOR(RED)
+    A**Message Subfile
+     A          R MSGSFL                    SFL
+     A                                      SFLMSGRCD(24)
+     A            MSGKEY                    SFLMSGKEY
+     A            MSGQ                      SFLPGMQ(10)
+     A          R MSGCTL                    SFLCTL(MSGSFL)
+     A                                      SFLDSP
+     A                                      SFLDSPCTL
+     A                                      SFLINZ
+     A N98                                  SFLEND
+     A                                      SFLSIZ(0008)
+     A                                      SFLPAG(0001)
+     A            #PSPGM                    SFLPGMQ(10)
+    A*WINDOW SUBFILE PART
+     A          R CUSTWDWSFL                SFL
+     A*%%TS  SD  20210203  031405  KOLLURP2    REL-V7R4M0  5770-WDS
+     A  99                                  SFLNXTCHG
+     A            SELRRN         4S 0H
+     A            CSWOPT         1A  B  5  2
+     A  49                                  DSPATR(RI)
+     A  49                                  DSPATR(PC)
+     A            CSWID          5Y 0O  5  7EDTCDE(Z)
+     A            CSWNM         15A  O  5 20
+     A            CSWCT         10A  O  5 38
+     A            CSWST          1A  O  5 53
+    A*WINDOW SUBFILE CONTROL PART
+     A          R CUSTWDWCTL                SFLCTL(CUSTWDWSFL)
+     A*%%TS  SD  20210212  095640  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      SFLSIZ(9999)
+     A                                      SFLPAG(0006)
+     A                                      WINDOW(WINFOOTER)
+     A                                      CF02(02 'PREVIOUS')
+     A                                      OVERLAY
+     A  44                                  SFLDSP
+     A  45                                  SFLDSPCTL
+     A  46                                  SFLCLR
+     A  47                                  SFLEND
+     A  48        SETRRN         4S 0H      SFLRCDNBR(CURSOR)
+     A                                  1 25'Customer Data'
+     A                                      COLOR(WHT)
+     A                                  2  2'Type Option, Press Enter.'
+     A                                      COLOR(BLU)
+     A                                  3  2'1=Select'
+     A                                      COLOR(BLU)
+     A                                  4  2'Opt'
+     A                                      COLOR(WHT)
+     A                                  4  7'Customer ID'
+     A                                      COLOR(WHT)
+     A                                  4 20'Customer Name'
+     A                                      COLOR(WHT)
+     A                                  4 51'Status'
+     A                                      COLOR(WHT)
+     A                                  4 38'City'
+     A                                      COLOR(WHT)
+    A*NO DATA FOUND FOR WINDOW SCREEN
+     A          R NODATA1
+     A*%%TS  SD  20210203  041314  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      OVERLAY
+     A                                      WINDOW(WINFOOTER)
+     A                                  7 12'No Data Found to Display'
+     A                                      COLOR(RED)
+    A*MESSAGE SUBFILE FOR WINDOW
+     A          R WMSGSFL                   SFL
+     A                                      SFLMSGRCD(14)
+     A            MSGKEY                    SFLMSGKEY
+     A            MSGQ                      SFLPGMQ(10)
+     A          R WMSGCTL                   SFLCTL(WMSGSFL)
+     A                                      OVERLAY
+     A                                      SFLDSP
+     A                                      SFLDSPCTL
+     A N76                                  SFLINZ
+     A N76                                  SFLEND
+     A                                      SFLSIZ(0004)
+     A                                      SFLPAG(0001)
+     A                                      WINDOW(WINFOOTER)
+     A            #PSPGM                    SFLPGMQ(10)
+    A*FOOTER PART FOR WINDOW SCREEN
+     A          R WINFOOTER
+     A*%%TS  SD  20210203  041314  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      CF02(02 'PREVIOUS')
+     A                                      WINDOW(4 2 15 60)
+     A                                      OVERLAY
+     A                                      USRRSTDSP
+     A                                 13  2'F2=Previous'
+     A                                      COLOR(BLU)
+     A          R PRODWDWSFL                SFL
+     A*%%TS  SD  20210208  045541  KOLLURP2    REL-V7R4M0  5770-WDS
+     A  99                                  SFLNXTCHG
+     A            SELRRN1        4S 0H
+     A            PRWOPT         1A  B  6  2
+     A  50                                  DSPATR(RI)
+     A  50                                  DSPATR(PC)
+     A            PRWID          5Y 0O  6  7EDTCDE(Z)
+     A            PRWNM         15A  O  6 17
+     A            PRTQT          4Y 0O  6 35EDTCDE(Z)
+     A            PRAQT          4Y 0O  6 47EDTCDE(Z)
+     A          R PRODWDWCTL                SFLCTL(PRODWDWSFL)
+     A*%%TS  SD  20210212  095558  KOLLURP2    REL-V7R4M0  5770-WDS
+     A                                      SFLSIZ(9999)
+     A                                      SFLPAG(0006)
+     A                                      WINDOW(WINFOOTER)
+     A                                      CF02(02 'PREVIOUS')
+     A                                      RTNCSRLOC(&CSRREC &CSRFLD &CSRPOS)
+     A                                      OVERLAY
+     A  51                                  SFLDSP
+     A  52                                  SFLDSPCTL
+     A  53                                  SFLCLR
+     A  54                                  SFLEND
+     A  55        SETRRN1        4S 0H      SFLRCDNBR(CURSOR)
+     A            CSRREC        10A  H
+     A            CSRFLD        10A  H
+     A            CSRPOS         4S 0H
+     A                                  1 25'Product Data'
+     A                                      COLOR(WHT)
+     A                                  2  2'Type Option, Press Enter.'
+     A                                      COLOR(BLU)
+     A                                  3  2'1=Select'
+     A                                      COLOR(BLU)
+     A                                  4  2'Opt'
+     A                                      COLOR(WHT)
+     A                                  4  7'Product'
+     A                                      COLOR(WHT)
+     A                                  4 35'Total'
+     A                                      COLOR(WHT)
+     A                                  4 17'Product Name'
+     A                                      COLOR(WHT)
+     A                                  5 35'Quantity'
+     A                                      COLOR(WHT)
+     A                                  4 47'Available'
+     A                                      COLOR(WHT)
+     A                                  5 47'Quantity'
+     A                                      COLOR(WHT)
+     A                                  5  7'ID'
+     A                                      COLOR(WHT) 
